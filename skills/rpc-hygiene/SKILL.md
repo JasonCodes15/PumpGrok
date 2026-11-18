@@ -34,7 +34,7 @@ secret in URL or log line -> redact immediately, rotate the key out of band
 
 1. S1 - Use the ordered list: send reads to the primary Solana RPC first, then fail over strictly in the configured order. Never reorder by latency hunches and never fan out to unlisted endpoints.
 2. S2 - Respect the rate limits: each endpoint carries a budget; when the budget is spent, back off with the configured retry (timeout, 5xx, and 429 only) instead of hammering. Malformed responses are typed `DataStale`, never exceptions that skip handling.
-3. S3 - Keep keys out of text: the API key travels in headers or redacted config, never in URLs, log lines, or error messages. If a key leaks into a log, redact the line and rotate the key.
+3. S3 - Keep keys out of config and text. Endpoint values stay keyless. A Helius host (`*.helius-rpc.com`) receives `PUMPGROK_RPC__API_KEY` as the documented `api-key` query parameter on the outgoing request only. Other hosts receive that key as an `x-api-key` header (`PUMPGROK_RPC__AUTH=header` forces the header; `helius` forces the query parameter, including on a custom hostname). Logs, errors, receipts, and settings text redact the key. If a key leaks into a log, redact the line and rotate the key.
 4. S4 - Mark staleness honestly: when every endpoint is degraded, label the data stale with its age and stop ticket flow that depends on it. A stale price is information; a guessed price is a lie.
 5. S5 - Stay in your grant: SCOUT, WHALE, SNIPER, RUG, and EXIT each call only their rostered subset. Needing another subset is a roster change through RISK, not a reason to borrow.
 
@@ -43,7 +43,7 @@ secret in URL or log line -> redact immediately, rotate the key out of band
 | Symptom | Cause | Action |
 |---|---|---|
 | All endpoints degraded | Outage or exhausted budgets | Mark stale, halt dependent tickets, keep polling on schedule |
-| Key in a log line | URL-built client or verbose error dump | Redact, rotate the key, fix the client to use headers |
+| Key in a log line | URL stored in config, or a verbose error dump | Redact, rotate the key, keep the endpoint keyless and inject the key only at send time |
 | Wrong-subset call refused | Seat reaching outside its roster | Request the roster change; never work around PermissionDenied |
 | Silent fallback to a cache | Stale data presented as fresh | Attach age and source to every read; fail closed past the freshness bound |
 

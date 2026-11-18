@@ -146,6 +146,7 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
         active_clock,
         secrets.SystemRandom(),
         api_key=settings.rpc.api_key,
+        auth=settings.rpc.auth,
     )
     store = LedgerStore(ledger_path)
     budget = settings.risk

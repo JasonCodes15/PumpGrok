@@ -96,7 +96,7 @@ Paper-only by default; live mode refuses to start unless every precondition defi
 - `run` accepts `--mode paper --once --replay <dir>` (one cycle) and `--serve --replay <dir>` (loop); `--record`, `--duration` and other combinations exit not-implemented (`src/pumpgrok/cli/verbs_state.py`, `_run`).
 - `run --mode live` evaluates `LiveGate` in `src/pumpgrok/cli/verbs_state.py` (`_run`) and refuses with exit code `3` (`EXIT_LIVE` in `src/pumpgrok/cli/codes.py`) when any precondition is unmet.
 - Secrets arrive only as `PUMPGROK_*` env vars per `src/pumpgrok/config/settings.py`; key-bearing endpoint values are refused at startup (see `RpcSettings` in `src/pumpgrok/config/settings.py`).
-- Paid-provider keys travel in `api_key` and are sent as a header, never embedded in endpoint URLs (see `src/pumpgrok/config/settings.py`).
+- Paid-provider keys travel in `api_key` (`PUMPGROK_RPC__API_KEY`). Helius hosts receive that key as the documented `api-key` query parameter at send time; other hosts receive an `x-api-key` header. The key is never stored in an endpoint URL (see `src/pumpgrok/config/settings.py` and `src/pumpgrok/tools/onchain/rpc.py`).
 
 ## Known gaps
 

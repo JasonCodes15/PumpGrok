@@ -105,6 +105,50 @@ def test_plaintext_endpoint_refused_by_field(
     assert value not in message
 
 
+def test_helius_key_embedded_in_endpoints_is_refused(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planted = "fake_helius_key"
+    monkeypatch.setenv(
+        "PUMPGROK_RPC__ENDPOINTS",
+        f'["https://mainnet.helius-rpc.com/?api-key={planted}"]',
+    )
+    with pytest.raises(ConfigError) as excinfo:
+        load_settings()
+    message = str(excinfo.value)
+    assert "PUMPGROK_RPC__ENDPOINTS" in message
+    assert planted not in message
+    assert "mainnet.helius-rpc.com" not in message
+
+
+def test_helius_keyless_endpoint_loads_secret_outside_the_url(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planted = "fake_helius_key"
+    monkeypatch.setenv("PUMPGROK_RPC__ENDPOINTS", '["https://mainnet.helius-rpc.com"]')
+    monkeypatch.setenv("PUMPGROK_RPC__API_KEY", planted)
+    monkeypatch.setenv("PUMPGROK_RPC__AUTH", "auto")
+    settings = load_settings()
+    assert settings.rpc.endpoints == ["https://mainnet.helius-rpc.com"]
+    assert settings.rpc.auth == "auto"
+    assert settings.rpc.api_key.get_secret_value() == planted
+    assert planted not in repr(settings)
+    assert planted not in str(settings)
+    assert planted not in settings.model_dump_json()
+
+
+def test_rpc_auth_value_is_not_echoed_when_refused(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planted = "fake_helius_key"
+    monkeypatch.setenv("PUMPGROK_RPC__AUTH", planted)
+    with pytest.raises(ConfigError) as excinfo:
+        load_settings()
+    message = str(excinfo.value)
+    assert "rpc.auth" in message
+    assert planted not in message
+
+
 def test_bad_type_reports_loc_and_type_only(
     clean_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

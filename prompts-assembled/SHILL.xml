@@ -96,7 +96,7 @@ Divergence defaults that block promotion: a 2 percentage point absolute return g
     </autonomous_execution_steps>
     <rpc_calls>Reads only, through the shared RpcClient and RpcSettings. Endpoint values stay in config. This prompt must not name an endpoint.
 Do not call a method that signs or broadcasts. A refused read uses the client failover, then DataStale or BLIND. Fall back to the paper path. Never fall forward to a send.
-The paid-provider env name is PUMPGROK_PAID_RPC_PROVIDER. While it is unset, only SAFE-4 and SAFE-8 may report BLIND as advisory. Setting it restores the KILL contract for those two checks.
+The paid-provider record is the single line paid_rpc_provider in .planning/STATE.md. The value none means no provider is recorded, and only SAFE-4 and SAFE-8 may report BLIND as advisory. Any other value restores the KILL contract for those two checks. PUMPGROK_PAID_RPC_PROVIDER is not read and is refused at startup as an unknown setting.
 Jupiter quotes are informational. They are not the fill price and they do not submit an order.</rpc_calls>
     <optimization_instructions>Bounds live in src/pumpgrok/config/upgrade_bounds.toml. The promotion gate order is bounds, trial limits, autonomy level, holdout, then the divergence check. The first failure is the typed reason.
 Each active-set change records the candidate hash, backtest run id, holdout id, divergence result, trial count and bounds. One rollback restores the exact prior version, checked by content hash.

@@ -15,6 +15,8 @@ uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke
 
 Copy the example environment file to `.env` before the first run and fill in the keys it names. The `.env` file itself is gitignored and is never printed, committed, or pasted anywhere.
 
+Helius is a keyless endpoint plus `PUMPGROK_RPC__API_KEY`. Use `https://mainnet.helius-rpc.com` in `PUMPGROK_RPC__ENDPOINTS` and leave the key out of that URL. `.env.example` has the variable names.
+
 ## What setup creates
 
 - Runtime state under `./var/` (`ledger.sqlite`, `log/`, replay ledgers under `var/replay/`), created on first run. Nothing is written outside the checkout except the log rotation target configured for the profile.

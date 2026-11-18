@@ -7,7 +7,10 @@ replaced with `[redacted]`. A masked span keeps its first four characters, the
 `_redact` shape of `check_secrets.py:123-126`.
 
 Applied by :class:`RedactionFilter` on every handler before formatting, so the
-JSON and text formatters only ever see redacted text.
+JSON and text formatters only ever see redacted text. Query values named
+``api-key``, ``token``, ``secret``, ``password``, or ``key``, and an
+``x-api-key`` header value, are replaced even when they are too short for a
+value-shape pattern.
 """
 
 from __future__ import annotations
@@ -64,8 +67,18 @@ def mask(secret: str) -> str:
     return secret[:KEEP] + "*" * max(4, len(secret) - KEEP)
 
 
+# Query values and header values, including short keys the shape patterns miss.
+# The value is replaced wholesale so a short or unusual key cannot survive in a log.
+_QUERY_SECRET_RE = re.compile(
+    r"(?i)([?&](?:api[-_]?key|secret|password|token|(?<![A-Za-z0-9_-])key)=)[^&#\s\"']*"
+)
+_HEADER_SECRET_RE = re.compile(r"(?i)(x-api-key[\"']?\s*[:=]\s*[\"']?)[^\"'\s,}&]+")
+
+
 def redact_text(text: str) -> str:
     """Mask every value-shaped secret inside one string."""
+    text = _QUERY_SECRET_RE.sub(lambda match: match.group(1) + "REDACTED", text)
+    text = _HEADER_SECRET_RE.sub(lambda match: match.group(1) + "REDACTED", text)
     for pattern in VALUE_PATTERNS:
         text = pattern.sub(lambda match: mask(match.group(0)), text)
     return text

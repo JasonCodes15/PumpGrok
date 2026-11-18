@@ -2,6 +2,20 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - Helius RPC authentication
+
+### Added
+
+- Helius RPC hosts (`*.helius-rpc.com`) authenticate with `PUMPGROK_RPC__API_KEY` as the documented `api-key` query parameter, injected when the request is sent. The endpoint list stays keyless. `PUMPGROK_RPC__AUTH=header` keeps the generic `x-api-key` header. `PUMPGROK_RPC__AUTH=helius` uses the query parameter on every endpoint.
+
+### Changed
+
+- Seat prompts no longer tell operators to set `PUMPGROK_PAID_RPC_PROVIDER`. That name is refused at startup. The paid-provider record remains the `paid_rpc_provider` line in `.planning/STATE.md`.
+
+### Security
+
+- The RPC key is redacted from logs, errors, and settings text. A failover list that contains a Helius host does not attach that key to the other hosts. Redirects are not followed.
+
 ## [Unreleased] - v4 Phase 12: event runtime core
 
 ### Added

@@ -56,14 +56,18 @@ class DataSettings(BaseModel):
 class RpcSettings(BaseModel):
     """Solana JSON-RPC failover list. Endpoints are keyless URLs only.
 
-    Paid-provider keys travel in ``api_key`` and are sent as a header;
-    key-bearing endpoint values are refused at startup (T-02-01).
+    Paid-provider keys travel in ``api_key``. ``auth`` chooses how that key
+    is attached at send time: ``auto`` (Helius hosts use the documented
+    ``api-key`` query parameter, other hosts use an ``x-api-key`` header),
+    ``header`` (always the header), or ``helius`` (always the query
+    parameter). Key-bearing endpoint values are refused at startup (T-02-01).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     endpoints: list[str] = Field(default_factory=lambda: ["https://api.mainnet-beta.solana.com"])
     api_key: SecretStr = SecretStr("")
+    auth: Literal["auto", "header", "helius"] = "auto"
 
     @field_validator("endpoints")
     @classmethod

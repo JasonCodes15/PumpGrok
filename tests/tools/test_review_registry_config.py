@@ -69,6 +69,25 @@ def test_operator_registry_forwards_rpc_api_key(
     _build(tmp_path, settings)
     assert isinstance(seen["api_key"], SecretStr)
     assert seen["api_key"].get_secret_value() == "paid-key-123"
+    assert seen["auth"] == "auto"
+
+
+def test_operator_registry_forwards_rpc_auth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PUMPGROK_RPC__AUTH", "helius")
+    settings = load_settings()
+    seen: dict[str, Any] = {}
+    real_rpc = tools_mod.RpcClient
+
+    class _SpyRpc(real_rpc):  # type: ignore[valid-type,misc]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            seen.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(tools_mod, "RpcClient", _SpyRpc)
+    _build(tmp_path, settings)
+    assert seen["auth"] == "helius"
 
 
 def test_operator_registry_forwards_safety_thresholds(

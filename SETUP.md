@@ -138,7 +138,7 @@ uv run pumpgrok tools onchain.authorities --help
 ```
 
 No API key is required. The reads work on public endpoints.
-A private Solana RPC (Helius, QuickNode, etc.) dramatically improves reliability and can be set with `PUMPGROK_RPC__ENDPOINTS`.
+A private Solana RPC improves reliability. Set a keyless HTTPS URL in `PUMPGROK_RPC__ENDPOINTS`. For Helius, use `https://mainnet.helius-rpc.com` and put the key only in `PUMPGROK_RPC__API_KEY`. The desk adds the documented `api-key` query parameter when it sends the request, and the key stays out of the endpoint, logs, errors, and settings text. Do not put the key in the URL. See `.env.example`.
 
 ---
 

@@ -21,7 +21,7 @@ The desk starts in **research** mode. **paper** is the simulated-fill level: `pu
 
 - A host that can load `agents/`, `skills/`, and `rules/` (Grok Bot, Cursor, Claude Code, or Grok Build)
 - Python 3.12 via `uv` (`uv sync` installs the locked deps; `scripts/check.sh` is stdlib only)
-- Optional: a private Solana RPC URL via `PUMPGROK_RPC__ENDPOINTS` (reads default to `https://api.mainnet-beta.solana.com`)
+- Optional: a keyless Solana RPC URL via `PUMPGROK_RPC__ENDPOINTS` (reads default to `https://api.mainnet-beta.solana.com`). For Helius, use `https://mainnet.helius-rpc.com` and `PUMPGROK_RPC__API_KEY`; the key is attached at send time and is not written into the URL. See `.env.example`.
 
 A committed `uv.lock` pins every dependency. No API keys are required for the public endpoints the reads call.
 

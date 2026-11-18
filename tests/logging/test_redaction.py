@@ -199,6 +199,22 @@ def test_camel_case_secret_names_are_masked(key: str) -> None:
     assert getattr(record, key) == "[redacted]"
 
 
+def test_short_query_api_key_is_redacted() -> None:
+    key = "fake_helius_key"
+    masked = redact_text(f"https://mainnet.helius-rpc.com/?commitment=confirmed&api-key={key}")
+    assert key not in masked
+    assert "api-key=REDACTED" in masked
+    assert "commitment=confirmed" in masked
+
+
+def test_header_api_key_text_is_redacted() -> None:
+    key = "fake_helius_key"
+    masked = redact_text(f"sent x-api-key: {key} to host")
+    assert key not in masked
+    assert "x-api-key: REDACTED" in masked
+    assert "to host" in masked
+
+
 def test_authorization_header_value_is_masked() -> None:
     record = _filtered(headers={"Authorization": "Basic dXNlcjpwYXNz", "Accept": "text/plain"})
     assert record.headers == {"Authorization": "[redacted]", "Accept": "text/plain"}

@@ -22,7 +22,15 @@ def test_threshold_defaults_match_review_values() -> None:
     assert thresholds.liquidity_multiple_min == 10.0
     assert thresholds.creator_share_veto == 0.25
     assert thresholds.top5_share_veto == 0.80
-    assert len(SafetyThresholds.model_fields) == 11
+    assert thresholds.bundler_cluster_warn_pct == 10.0
+    assert thresholds.bundler_cluster_fail_pct == 25.0
+    assert thresholds.bundler_same_slot_min_buyers == 3.0
+    assert thresholds.bundler_funding_window_s == 600.0
+    assert thresholds.bundler_common_funder_min_buyers == 2.0
+    assert thresholds.bundler_launch_txs == 6.0
+    assert thresholds.bundler_max_rpc_calls == 24.0
+    assert thresholds.bundler_time_budget_s == 12.0
+    assert len(SafetyThresholds.model_fields) == 19
 
 
 def test_settings_carries_safety_section() -> None:
@@ -36,7 +44,9 @@ def test_overlays_pin_safety_thresholds() -> None:
         thresholds = data["safety"]["thresholds"]
         assert thresholds["kill_below_score"] == 40.0
         assert thresholds["conditional_below_score"] == 70.0
-        assert len(thresholds) == 11
+        assert thresholds["bundler_cluster_fail_pct"] == 25.0
+        assert thresholds["bundler_max_rpc_calls"] == 24.0
+        assert len(thresholds) == 19
 
 
 def test_env_overrides_overlay_threshold(monkeypatch) -> None:

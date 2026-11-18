@@ -19,7 +19,7 @@ from pumpgrok.contracts.projection import (
 
 SERVER_PATH = Path(__file__).resolve().parents[1] / "src" / "desk_gateway" / "server.py"
 
-EXPECTED_TOOL_COUNT = 37
+EXPECTED_TOOL_COUNT = 38
 
 
 def test_transport_names_use_underscore_form() -> None:

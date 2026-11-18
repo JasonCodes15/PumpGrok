@@ -65,6 +65,38 @@ def check_top10_concentration(top: dict[str, Any], thresholds: SafetyThresholds)
     )
 
 
+def check_bundler_cluster(reading: dict[str, Any], thresholds: SafetyThresholds) -> CheckResult:
+    """Fail or warn on flagged launch-cluster share. Incomplete data stays blind."""
+    if not reading.get("complete"):
+        reason = str(reading.get("blind_reason") or "bundler cluster unreadable")
+        return CheckResult(
+            id="bundler_cluster",
+            status="blind",
+            value=None,
+            threshold=thresholds.bundler_cluster_fail_pct,
+            weight=Decimal("0.10"),
+            reason=reason,
+        )
+    share = Decimal(str(reading.get("cluster_share", "0"))) * Decimal(100)
+    pct = float(share)
+    status: Literal["fail", "warn", "pass"]
+    if pct >= thresholds.bundler_cluster_fail_pct:
+        status = "fail"
+    elif pct >= thresholds.bundler_cluster_warn_pct:
+        status = "warn"
+    else:
+        status = "pass"
+    summary = str(reading.get("evidence_summary") or "no flagged cluster in the launch window")
+    return CheckResult(
+        id="bundler_cluster",
+        status=status,
+        value=pct,
+        threshold=thresholds.bundler_cluster_fail_pct,
+        weight=Decimal("0.10"),
+        reason=f"flagged cluster holds {pct:.2f}% of supply. {summary}",
+    )
+
+
 def check_deployer_history(dep: dict[str, Any]) -> CheckResult:
     """Fail adjudicated-bad creators; warn prolific ones; pass the rest."""
     if bool(dep.get("is_known_bad")) or int(dep.get("rugs", 0)) > 0:

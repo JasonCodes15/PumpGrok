@@ -1,6 +1,6 @@
 """Shared full-registry builder for the 03-04 least-privilege suites.
 
-Builds every one of the 37 catalog tools through its production factory
+Builds every one of the 38 catalog tools through its production factory
 with test doubles: an ``httpx.MockTransport`` RPC client that refuses any
 real call, a tmp ``LedgerStore``, the refusing adapter, an empty-allowlist
 notifier, and a tmp memory bank. One helper keeps the least-privilege, the

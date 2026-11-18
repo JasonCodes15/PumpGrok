@@ -63,6 +63,14 @@ creator_share_veto = 0.25
 top5_share_veto = 0.80
 kill_below_score = 40.0
 conditional_below_score = 70.0
+bundler_cluster_warn_pct = 10.0
+bundler_cluster_fail_pct = 25.0
+bundler_same_slot_min_buyers = 3.0
+bundler_funding_window_s = 600.0
+bundler_common_funder_min_buyers = 2.0
+bundler_launch_txs = 6.0
+bundler_max_rpc_calls = 24.0
+bundler_time_budget_s = 12.0
 
 [scoring.weights]
 audit = 0.30

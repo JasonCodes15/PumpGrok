@@ -47,7 +47,7 @@ Mandatory Live Checklist (run every time, in this exact order):
 4. Sell / transfer tax – preferably 0 %; hard fail above 5–10 %.
 5. Honeypot / cannot-sell indicators (simulate sell if tools allow).
 6. Top-10 holders (excluding LP) concentration – flag if > 20–25 %.
-7. Bundler / insider cluster detection.
+7. Bundler / insider cluster detection. safety.score_report reads the mint's earliest transactions through the shared RPC client and returns a live pass, warn, or fail: cluster share of supply, same-slot buyers, one-hop shared funding, and deployer overlap. A lone dev buy is not a cluster. RPC failure, incomplete history, or an exhausted call or time budget is BLIND, and a required BLIND is KILL. This check is not blind-only and it is never a silent pass.
 8. Deployer wallet history if visible.
 9. Token-2022 extensions (TransferFee, TransferHook, PermanentDelegate, etc.) – document any.
 10. Liquidity depth relative to intended size (minimum 10–20× recommended).

@@ -104,6 +104,39 @@ def _handler(*, freeze_live: bool, supply: str, holders_ok: bool):
             result = {"context": {"slot": 9}, "value": {"amount": supply, "decimals": 6}}
         elif method == "getSignaturesForAddress":
             result = [{"signature": "d1", "slot": 1, "blockTime": _NOW - 100}]
+        elif method == "getTransaction":
+            result = {
+                "slot": 1,
+                "blockTime": _NOW - 100,
+                "meta": {
+                    "err": None,
+                    "preBalances": [2_000_000_000, 0],
+                    "postBalances": [1_000_000_000, 1_000_000_000],
+                    "preTokenBalances": [],
+                    "postTokenBalances": [
+                        {
+                            "accountIndex": 0,
+                            "mint": MINT,
+                            "owner": CREATOR,
+                            "uiTokenAmount": {"amount": "1000", "decimals": 6},
+                        },
+                        {
+                            "accountIndex": 1,
+                            "mint": MINT,
+                            "owner": CURVE,
+                            "uiTokenAmount": {"amount": supply, "decimals": 6},
+                        },
+                    ],
+                },
+                "transaction": {
+                    "message": {
+                        "accountKeys": [
+                            {"pubkey": CREATOR, "signer": True, "writable": True},
+                            {"pubkey": CURVE, "signer": False, "writable": True},
+                        ]
+                    }
+                },
+            }
         else:
             raise AssertionError(f"unexpected method {method}")
         return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
@@ -159,7 +192,9 @@ async def test_clear_report_on_clean_data() -> None:
     assert out.score == 100
     assert out.verdict_recommendation == "CLEAR"
     assert out.hard_veto is False
-    assert out.blind_checks == ["transfer_tax", "honeypot", "bundler_cluster"]
+    assert out.blind_checks == ["transfer_tax", "honeypot"]
+    statuses = {c.id: c.status for c in out.checks}
+    assert statuses["bundler_cluster"] == "pass"
     assert out.meta.source == "solana_rpc"
     assert out.meta.freshness_s == 0.0
     assert out.thresholds_used["kill_below_score"] == 40.0

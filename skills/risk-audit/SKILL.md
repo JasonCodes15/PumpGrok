@@ -36,7 +36,7 @@ Parse the JSON. If `hasMintAuthority` or `hasFreezeAuthority` is true, that is a
    - Sell / transfer tax: preferably 0 %; hard fail above 5-10 %.
    - Honeypot / cannot-sell indicators.
    - Top-10 holders (ex-LP) concentration: flag above 20-25 %.
-   - Bundler / insider cluster detection.
+   - Bundler / insider cluster detection. `safety.score_report` reads the mint's earliest transactions through the shared RPC client and returns a live pass, warn, or fail with the flagged cluster's share of supply and the wallets, slots, and funders. Same-slot buyers (3 or more), a shared funding wallet one hop back, and deployer overlap are the signals. RPC failure, an incomplete launch window, or an exhausted call or time budget is BLIND, and that BLIND is KILL. It is not blind-only and it is never a silent pass.
    - Deployer wallet history if visible.
    - Token-2022 extensions: document any.
    - Liquidity depth relative to intended size.

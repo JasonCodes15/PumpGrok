@@ -112,6 +112,39 @@ def _handler(
             result = {"context": {"slot": 9}, "value": {"amount": "1000000000000", "decimals": 6}}
         elif method == "getSignaturesForAddress":
             result = [{"signature": "d1", "slot": 1, "blockTime": _NOW - 100}]
+        elif method == "getTransaction":
+            result = {
+                "slot": 1,
+                "blockTime": _NOW - 100,
+                "meta": {
+                    "err": None,
+                    "preBalances": [2_000_000_000, 0],
+                    "postBalances": [1_000_000_000, 1_000_000_000],
+                    "preTokenBalances": [],
+                    "postTokenBalances": [
+                        {
+                            "accountIndex": 0,
+                            "mint": MINT,
+                            "owner": CREATOR,
+                            "uiTokenAmount": {"amount": "1000", "decimals": 6},
+                        },
+                        {
+                            "accountIndex": 1,
+                            "mint": MINT,
+                            "owner": CURVE,
+                            "uiTokenAmount": {"amount": "1000000000000", "decimals": 6},
+                        },
+                    ],
+                },
+                "transaction": {
+                    "message": {
+                        "accountKeys": [
+                            {"pubkey": CREATOR, "signer": True, "writable": True},
+                            {"pubkey": CURVE, "signer": False, "writable": True},
+                        ]
+                    }
+                },
+            }
         else:
             raise AssertionError(f"unexpected method {method}")
         return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})

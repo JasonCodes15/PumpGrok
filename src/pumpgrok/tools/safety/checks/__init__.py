@@ -2,8 +2,10 @@
 
 Every check returns a reasoned row; a check without data returns
 ``status="blind"`` instead of raising. ``REQUIRED_IDS`` force a KILL
-verdict when blind; ``ADVISORY_IDS`` are blind by construction in Phase 3
-(no data source wired) and never force the verdict on their own.
+verdict when blind. ``ADVISORY_IDS`` (transfer tax and honeypot) have no
+data source and never force the verdict on their own. ``bundler_cluster``
+is required: a live scan returns pass, warn, or fail, and a blind result
+(RPC failure, incomplete launch window, or exhausted budget) forces KILL.
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ REQUIRED_IDS: frozenset[str] = frozenset(
         "freeze_authority",
         "lp_status",
         "top10_concentration",
+        "bundler_cluster",
         "deployer_history",
         "token2022_extensions",
         "liquidity_depth",
@@ -52,7 +55,7 @@ REQUIRED_IDS: frozenset[str] = frozenset(
 )
 
 
-ADVISORY_IDS: frozenset[str] = frozenset({"transfer_tax", "honeypot", "bundler_cluster"})
+ADVISORY_IDS: frozenset[str] = frozenset({"transfer_tax", "honeypot"})
 
 # Amendment 2026-10-25: SAFE-4 (top10_concentration) and SAFE-8
 # (deployer_history) report BLIND as advisory while no paid RPC provider is

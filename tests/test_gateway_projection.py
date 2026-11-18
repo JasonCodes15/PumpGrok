@@ -90,7 +90,7 @@ def test_transport_mapping_injective_over_registry(tmp_path: Path) -> None:
     reg, _, _ = build_full_registry(tmp_path)
     transports = [transport_name(name) for name in reg.names()]
     assert len(set(transports)) == len(transports), "transport collision over registry"
-    assert len(reg.names()) == 37
+    assert len(reg.names()) == 38
 
 
 def test_contracts_facade_matches_manifests_for_every_seat() -> None:

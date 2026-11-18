@@ -1,7 +1,7 @@
 """safety.score_report: composable rug heuristics with BLIND semantics (TOOL-003).
 
-Composes six readers in-process (authorities, lp_status, token_metadata,
-top_holders, deployer_history, market.liquidity) and scores 0..100
+Composes readers in-process (authorities, lp_status, token_metadata,
+top_holders, bundler_cluster, deployer_history, market.liquidity) and scores 0..100
 (100 = safest) with per-check reasons. Thresholds come from config
 (``SafetyThresholds``) with an optional caller override; any check without
 data returns ``blind``, never an exception. A blind check on a required
@@ -33,6 +33,7 @@ from pumpgrok.core.tool import RetryPolicy, Tool, ToolInput, ToolOutput, ToolSpe
 from pumpgrok.tools._common import SOLANA_RPC_SOURCE, MintStr, meta_now, utcnow
 from pumpgrok.tools.market.liquidity import LiquidityIn, run_liquidity
 from pumpgrok.tools.onchain.authorities_tool import AuthoritiesIn, run_authorities
+from pumpgrok.tools.onchain.bundler_cluster import BundlerClusterIn, run_bundler_cluster
 from pumpgrok.tools.onchain.deployer_history import DeployerHistoryIn, run_deployer_history
 from pumpgrok.tools.onchain.lp_status import LpStatusIn, run_lp_status
 from pumpgrok.tools.onchain.rpc import RpcClient
@@ -48,6 +49,7 @@ from pumpgrok.tools.safety.checks import (
 )
 from pumpgrok.tools.safety.checks.authority import check_freeze_authority, check_mint_authority
 from pumpgrok.tools.safety.checks.readers import (
+    check_bundler_cluster,
     check_deployer_history,
     check_liquidity_depth,
     check_lp_status,
@@ -126,6 +128,7 @@ class _Readings:
     lp: dict[str, Any] | None
     meta: dict[str, Any] | None
     top: dict[str, Any] | None
+    bundle: dict[str, Any] | None
     dep: dict[str, Any] | None
     liq: dict[str, Any] | None
 
@@ -140,6 +143,8 @@ _HIGHER_IS_STRICTER: frozenset[str] = frozenset(
         "lp_lock_min_days",
         "kill_below_score",
         "conditional_below_score",
+        "bundler_funding_window_s",
+        "bundler_launch_txs",
     }
 )
 _LOWER_IS_STRICTER: frozenset[str] = frozenset(
@@ -150,6 +155,12 @@ _LOWER_IS_STRICTER: frozenset[str] = frozenset(
         "top10_concentration_fail_pct",
         "creator_share_veto",
         "top5_share_veto",
+        "bundler_cluster_warn_pct",
+        "bundler_cluster_fail_pct",
+        "bundler_same_slot_min_buyers",
+        "bundler_common_funder_min_buyers",
+        "bundler_max_rpc_calls",
+        "bundler_time_budget_s",
     }
 )
 
@@ -203,7 +214,9 @@ async def _fetch(call: Awaitable[dict[str, Any]]) -> dict[str, Any] | None:
         return None
 
 
-async def _read_all(inp: ScoreReportIn, rpc: RpcClient, runnable: list[CheckId]) -> _Readings:
+async def _read_all(
+    inp: ScoreReportIn, rpc: RpcClient, runnable: list[CheckId], active: SafetyThresholds
+) -> _Readings:
     """Run only the readers the runnable checks need, in the fixed reader order."""
     needed: set[str] = set(runnable)
     auth = (
@@ -226,6 +239,22 @@ async def _read_all(inp: ScoreReportIn, rpc: RpcClient, runnable: list[CheckId])
         if "top10_concentration" in needed
         else None
     )
+    bundle = (
+        await _fetch(
+            run_bundler_cluster(
+                BundlerClusterIn(
+                    mint=inp.mint,
+                    creator=inp.creator,
+                    curve_account=inp.curve_account,
+                    correlation_id=inp.correlation_id,
+                ),
+                rpc,
+                thresholds=active,
+            )
+        )
+        if "bundler_cluster" in needed
+        else None
+    )
     dep = (
         await _fetch(run_deployer_history(DeployerHistoryIn(creator=inp.creator or ""), rpc))
         if "deployer_history" in needed and inp.creator is not None
@@ -245,7 +274,7 @@ async def _read_all(inp: ScoreReportIn, rpc: RpcClient, runnable: list[CheckId])
         if "liquidity_depth" in needed
         else None
     )
-    return _Readings(auth=auth, lp=lp, meta=meta, top=top, dep=dep, liq=liq)
+    return _Readings(auth=auth, lp=lp, meta=meta, top=top, bundle=bundle, dep=dep, liq=liq)
 
 
 def _reader_row(
@@ -326,6 +355,18 @@ def _reader_rows(
                 evidence=evidence,
             )
         )
+    if "bundler_cluster" in runnable:
+        rows.append(
+            _reader_row(
+                "bundler_cluster",
+                readings.bundle,
+                lambda bundle: check_bundler_cluster(bundle, active),
+                clock,
+                weight=Decimal("0.10"),
+                blind_reason="bundler cluster unreadable",
+                evidence=evidence,
+            )
+        )
     if "deployer_history" in runnable:
         if inp.creator is None:
             rows.append(
@@ -375,7 +416,7 @@ def _reader_rows(
 
 
 def _advisory_rows(wanted: set[str], evidence: list[Evidence], clock: Clock) -> list[CheckResult]:
-    """Advisory checks are blind by construction in Phase 3 and carry no weight."""
+    """Transfer tax and honeypot stay blind: no data source is wired for them."""
     rows: list[CheckResult] = []
     for check_id in CHECK_IDS:
         if check_id in ADVISORY_IDS and check_id in wanted:
@@ -386,7 +427,7 @@ def _advisory_rows(wanted: set[str], evidence: list[Evidence], clock: Clock) -> 
                     value=None,
                     threshold=None,
                     weight=Decimal(0),
-                    reason="no Phase-3 data source; advisory blind",
+                    reason="no data source wired; advisory blind",
                 )
             )
             evidence.append(
@@ -430,7 +471,7 @@ async def run_score_report(
     runnable = [c for c in CHECK_IDS if c in wanted and c not in ADVISORY_IDS]
 
     evidence: list[Evidence] = []
-    readings = await _read_all(inp, rpc, runnable)
+    readings = await _read_all(inp, rpc, runnable, active)
     rows = _reader_rows(inp, runnable, readings, active, evidence, clock=rpc.clock)
     rows.extend(_advisory_rows(wanted, evidence, rpc.clock))
 

@@ -75,6 +75,19 @@ class SafetyThresholds(BaseModel):
     top5_share_veto: float = Field(default=0.80, ge=0)
     kill_below_score: float = Field(default=40.0, ge=0)
     conditional_below_score: float = Field(default=70.0, ge=0)
+    # Check 7 launch-window cluster. Percents are shares of supply.
+    # Same-slot minimum 3: a dev buy plus one sniper is not a bundle.
+    # Funding window 600s: bundlers fund wallets minutes before the buy.
+    # 6 earliest transactions, 24 RPC calls, 12s: two signature pages, supply,
+    # those transactions, and one hop back per buyer. Past the cap, BLIND.
+    bundler_cluster_warn_pct: float = Field(default=10.0, ge=0)
+    bundler_cluster_fail_pct: float = Field(default=25.0, ge=0)
+    bundler_same_slot_min_buyers: float = Field(default=3.0, ge=1)
+    bundler_funding_window_s: float = Field(default=600.0, ge=0)
+    bundler_common_funder_min_buyers: float = Field(default=2.0, ge=1)
+    bundler_launch_txs: float = Field(default=6.0, ge=1, le=20)
+    bundler_max_rpc_calls: float = Field(default=24.0, ge=0, le=40)
+    bundler_time_budget_s: float = Field(default=12.0, ge=0, le=30)
 
 
 class SafetySettings(BaseModel):

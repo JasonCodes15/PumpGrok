@@ -1,6 +1,6 @@
 """TOOL-009 least-privilege suite (interfaces section 4, invariants I1-I5).
 
-Every assertion resolves through the real registry shape (all 37 catalog
+Every assertion resolves through the real registry shape (all 38 catalog
 tools, see tests/registry_harness.py) against the manifests loaded from
 contracts/tool-rosters/*.yaml. The LIVE probe exec.live_place exists in a
 test-only registry only: the vault test pins that the real registry holds

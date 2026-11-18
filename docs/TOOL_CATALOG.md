@@ -243,7 +243,7 @@ tenacity retries. Failover rotates to the next URL on timeout, 5xx, 429, or
 | timeout_s | 45 (composes up to 8 onchain/market calls) |
 | retry | none at this level (inner tools retry) |
 | rate_limit_key | `solana_rpc` (inherited) |
-| backend | composes `onchain.authorities`, `onchain.lp_status`, `onchain.token_metadata`, `onchain.top_holders`, `onchain.deployer_history`, `market.liquidity`, `market.trades`; honeypot heuristic = sell-side simulation through `exec.simulate` on the PaperAdapter curve math (no transaction) |
+| backend | composes `onchain.authorities`, `onchain.lp_status`, `onchain.token_metadata`, `onchain.top_holders`, `onchain.bundler_cluster`, `onchain.deployer_history`, `market.liquidity`, `market.trades`; honeypot heuristic = sell-side simulation through `exec.simulate` on the PaperAdapter curve math (no transaction) |
 | callers | rug only (R35: RISK consumes the report event through `portfolio.ledger_read` and never re-runs it) |
 | source | new orchestration; metrics from `analyzer.py:168` `compute_metrics`, `:219` `_count_snipers`, `:226` `_wallet_diversity`, `:285` `_veto_reason`, `:294` `_risk_score` |
 
@@ -252,8 +252,15 @@ Threshold keys (config `safety.thresholds`, every value REVIEW; defaults from
 `top10_concentration_warn_pct: 20`, `top10_concentration_fail_pct: 25`,
 `liquidity_multiple_min: 10`, `liquidity_multiple_recommended: 20`,
 `lp_lock_min_days: 180`, `creator_share_veto: 0.25`, `top5_share_veto: 0.80`,
-`kill_below_score: 40`, `conditional_below_score: 70`. Any `blind` check on a required
-id forces `verdict_recommendation = KILL` (constitution clause 10).
+`kill_below_score: 40`, `conditional_below_score: 70`,
+`bundler_cluster_warn_pct: 10`, `bundler_cluster_fail_pct: 25`,
+`bundler_same_slot_min_buyers: 3`, `bundler_funding_window_s: 600`,
+`bundler_common_funder_min_buyers: 2`, `bundler_launch_txs: 6`,
+`bundler_max_rpc_calls: 24`, `bundler_time_budget_s: 12`.
+`bundler_cluster` is a live reading of the earliest mint transactions. A lone
+dev buy is not a cluster. RPC failure, an incomplete launch window, or an
+exhausted call or time budget is `blind`, never a pass. Any `blind` check on a
+required id forces `verdict_recommendation = KILL` (constitution clause 10).
 
 ## 4. exec.* (Sniper owns `src/pumpgrok/tools/exec/` and `src/pumpgrok/execution/`; `src/pumpgrok/execution/live/**` is RISK's, R31)
 

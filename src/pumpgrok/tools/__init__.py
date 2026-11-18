@@ -5,7 +5,7 @@
 production), a list-backed audit sink owned by the caller, a permitting limits
 checker (the PaperAdapter enforces approvals itself through its RiskEngine),
 and one ``RateLimiter`` per ``rate_limit_key`` held inside the
-registry. ``build_operator_registry()`` composes the full 37-tool Phase 4
+registry. ``build_operator_registry()`` composes the full 38-tool Phase 4
 catalog over the same root for operator verbs (TOOL-011).
 """
 
@@ -61,6 +61,7 @@ from pumpgrok.tools.notify.notifier import HttpxNotifier
 from pumpgrok.tools.notify.telegram import TelegramSender, read_telegram_token
 from pumpgrok.tools.notify.webhook import WebhookSender
 from pumpgrok.tools.onchain.authorities_tool import build_authorities_tool
+from pumpgrok.tools.onchain.bundler_cluster import build_bundler_cluster_tool
 from pumpgrok.tools.onchain.deployer_history import build_deployer_history_tool
 from pumpgrok.tools.onchain.large_transfers import build_large_transfers_tool
 from pumpgrok.tools.onchain.lp_status import build_lp_status_tool
@@ -147,7 +148,7 @@ def build_registry(
 
 
 def register_read_tools(registry: ToolRegistry, rpc: RpcClient) -> ToolRegistry:
-    """Register the twelve wave-2 READ tools bound to one RPC client.
+    """Register the wave-2 READ tools plus ``onchain.bundler_cluster``.
 
     Market (TOOL-001) and onchain (TOOL-002) tools share the single
     ``RpcClient`` with ordered failover and a header-only key (T-03-02-02).
@@ -165,6 +166,7 @@ def register_read_tools(registry: ToolRegistry, rpc: RpcClient) -> ToolRegistry:
             build_lp_status_tool(rpc),
             build_top_holders_tool(rpc),
             build_deployer_history_tool(rpc),
+            build_bundler_cluster_tool(rpc),
             build_large_transfers_tool(rpc),
             build_priority_fee_tool(rpc),
         ]
@@ -314,7 +316,7 @@ def build_operator_registry(
     p_drop: float = 0.0,  # CLI default: deterministic confirms; replay passes seeded curves
     seed: int | None = None,  # composition-root seed (INT-05); defaults to settings.replay.seed
 ) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
-    """Compose the full 37-tool operator registry (TOOL-011, R63).
+    """Compose the full 38-tool operator registry (TOOL-011, R63).
 
     Same wiring as the desk gateway and the least-privilege harness: every
     catalog tool registers through its production factory with the real

@@ -8,10 +8,13 @@ back), or when a buyer was funded by the deployer. A lone deployer buy is the
 normal pump.fun dev buy and is not a cluster.
 
 The scan stops at ``bundler_max_rpc_calls`` and ``bundler_time_budget_s``.
-RPC failure, a launch window that does not fit in two signature pages, an
-unreadable transaction, or an exhausted budget returns ``complete=False``.
-Callers must treat that as BLIND. A finished scan with no flagged wallets is
-the only pass.
+On Helius, the oldest signatures come from one ``getTransactionsForAddress``
+call (``sortOrder=asc``), so a mint with thousands of signatures still
+reaches its launch. Other endpoints page ``getSignaturesForAddress`` at
+limit 1000 until the start of history or the call budget. RPC failure, a
+history that does not fit in that budget, an unreadable transaction, or an
+exhausted time budget returns ``complete=False``. Callers must treat that
+as BLIND. A finished scan with no flagged wallets is the only pass.
 
 Standard JSON-RPC only. No enhanced transaction API and no new HTTP client.
 """
@@ -29,24 +32,20 @@ from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import J5, SOLANA_RPC_SOURCE, MintStr, meta_now
-from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
+from pumpgrok.tools.onchain.rpc import TRANSACTION_CONFIG, RpcClient, RpcError
 
-_SIG_PAGE = 20
-_MAX_SIG_PAGES = 2
+_SIG_PAGE = 1000
 _FUNDING_SIG_LIMIT = 8
-_TX_ENCODING: dict[str, Any] = {
-    "encoding": "jsonParsed",
-    "maxSupportedTransactionVersion": 0,
-}
 _SKIPPED_FUNDING = "funding hop skipped; same-slot cluster already meets the fail threshold"
 
 
 class _Blind(Exception):
     """The check cannot be finished. The reason is safe to surface."""
 
-    def __init__(self, reason: str) -> None:
+    def __init__(self, reason: str, *, code: int | None = None) -> None:
         super().__init__(reason)
         self.reason = reason
+        self.code = code
 
 
 class _Budget:
@@ -63,8 +62,8 @@ class _Budget:
         self._charge()
         try:
             return await self._rpc.call(method, params)
-        except RpcError:
-            raise _Blind("rpc failed for bundler_cluster") from None
+        except RpcError as exc:
+            raise _Blind("rpc failed for bundler_cluster", code=exc.code) from None
 
     def _charge(self) -> None:
         if self._left <= 0:
@@ -521,10 +520,36 @@ def _page(result: object) -> list[dict[str, Any]] | None:
     return page
 
 
-async def _launch_signatures(budget: _Budget, mint: str) -> list[dict[str, Any]]:
-    collected: list[dict[str, Any]] = []
+def _as_oldest(result: object) -> list[dict[str, Any]] | None:
+    """Oldest-first signature rows from ``getTransactionsForAddress``.
+
+    ``None`` means the body is not that shape. An empty ``data`` list is a
+    real empty history.
+    """
+    if not isinstance(result, dict):
+        return None
+    data = result.get("data")
+    if not isinstance(data, list):
+        return None
+    rows: list[dict[str, Any]] = []
+    for item in data:
+        if not isinstance(item, dict) or not isinstance(item.get("signature"), str):
+            return None
+        rows.append(item)
+    return rows
+
+
+def _fallback_page_cap(calls_left: int, launch_txs: int) -> int:
+    """Signature pages that still leave supply plus one read per launch tx."""
+    reserve = 1 + max(1, launch_txs)
+    return max(1, calls_left - reserve)
+
+
+async def _page_oldest(budget: _Budget, mint: str, *, max_pages: int) -> list[dict[str, Any]]:
+    """Oldest-first signatures by walking ``before`` until a short page."""
     before: str | None = None
-    for _page_index in range(_MAX_SIG_PAGES):
+    oldest: list[dict[str, Any]] = []
+    for _page_index in range(max(1, max_pages)):
         params: dict[str, Any] = {"limit": _SIG_PAGE}
         if before is not None:
             params["before"] = before
@@ -532,11 +557,42 @@ async def _launch_signatures(budget: _Budget, mint: str) -> list[dict[str, Any]]
         page = _page(result)
         if page is None or not isinstance(result, list):
             raise _Blind("launch signatures malformed")
-        collected.extend(page)
-        if len(result) < _SIG_PAGE or not page:
-            return list(reversed(collected))
+        if not page:
+            return list(reversed(oldest))
+        oldest = page
+        if len(result) < _SIG_PAGE:
+            return list(reversed(oldest))
         before = str(page[-1]["signature"])
     raise _Blind("launch window incomplete: history exceeds the signature page cap")
+
+
+async def _launch_signatures(
+    budget: _Budget, mint: str, *, limit: int, max_pages: int
+) -> list[dict[str, Any]]:
+    """Oldest signatures. Helius returns them directly; other RPCs page."""
+    capped = min(1000, max(1, limit))
+    try:
+        result = await budget.call(
+            "getTransactionsForAddress",
+            [
+                mint,
+                {
+                    "transactionDetails": "signatures",
+                    "sortOrder": "asc",
+                    "limit": capped,
+                },
+            ],
+        )
+    except _Blind as exc:
+        # Missing method and HTTP 429 both surface as an RPC failure here.
+        # A call or time budget must not turn into a second scan.
+        if exc.reason != "rpc failed for bundler_cluster":
+            raise
+        return await _page_oldest(budget, mint, max_pages=max_pages)
+    parsed = _as_oldest(result)
+    if parsed is None:
+        raise _Blind("launch signatures malformed")
+    return parsed[:capped]
 
 
 def _parse_supply(result: object) -> int | None:
@@ -569,7 +625,7 @@ async def _buyers_from_entry(
     budget: _Budget, inp: BundlerClusterIn, entry: dict[str, Any]
 ) -> list[_Buyer]:
     signature = str(entry["signature"])
-    tx = await budget.call("getTransaction", [signature, dict(_TX_ENCODING)])
+    tx = await budget.call("getTransaction", [signature, dict(TRANSACTION_CONFIG)])
     if not isinstance(tx, dict):
         raise _Blind("launch transaction unavailable")
     stamp = _stamp(tx, entry)
@@ -609,7 +665,7 @@ async def _one_hop(budget: _Budget, buyer: _Buyer, window_s: int) -> str | None:
     )
     if prior is None:
         return None
-    tx = await budget.call("getTransaction", [prior, dict(_TX_ENCODING)])
+    tx = await budget.call("getTransaction", [prior, dict(TRANSACTION_CONFIG)])
     if not isinstance(tx, dict):
         raise _Blind("funding transaction unavailable")
     meta = tx.get("meta")
@@ -656,7 +712,13 @@ def _assemble(
 
 
 async def _scan(inp: BundlerClusterIn, budget: _Budget, active: SafetyThresholds) -> _Found:
-    signatures = await _launch_signatures(budget, inp.mint)
+    launch = max(1, int(active.bundler_launch_txs))
+    signatures = await _launch_signatures(
+        budget,
+        inp.mint,
+        limit=launch,
+        max_pages=_fallback_page_cap(int(active.bundler_max_rpc_calls) - 1, launch),
+    )
     if not signatures:
         raise _Blind("no signatures for mint")
     supply = await _supply_units(budget, inp.mint)

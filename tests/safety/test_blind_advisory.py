@@ -146,7 +146,15 @@ def _handler(
                 },
             }
         else:
-            raise AssertionError(f"unexpected method {method}")
+            # getTransactionsForAddress is Helius-only. This RPC does not have it.
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "error": {"code": -32601, "message": "Method not found"},
+                },
+            )
         return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
 
     return handler

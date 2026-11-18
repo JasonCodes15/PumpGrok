@@ -40,7 +40,35 @@ _HELIUS_HOST = "helius-rpc.com"
 
 
 class RpcError(RuntimeError):
-    """Redacted RPC failure: method plus endpoint count, never URLs or keys."""
+    """Redacted RPC failure: method plus endpoint count, never URLs or keys.
+
+    ``code`` is the JSON-RPC error code when the endpoint returned one.
+    Transport failures leave it unset. The message stays redacted.
+    """
+
+    def __init__(self, message: str, *, code: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+# jsonParsed keeps owner and parsed instruction fields. The version ceiling
+# accepts legacy transactions and versioned ones. Pump.fun lands v0 and v1;
+# a ceiling of 0 makes getTransaction return -32015 for v1 and the caller
+# goes BLIND. 1 accepts legacy, v0, and v1.
+TRANSACTION_CONFIG: dict[str, Any] = {
+    "encoding": "jsonParsed",
+    "maxSupportedTransactionVersion": 1,
+}
+
+
+def _rpc_error_code(error: object) -> int | None:
+    """JSON-RPC error code, or None. The message is discarded."""
+    if not isinstance(error, dict):
+        return None
+    code = error.get("code")
+    if isinstance(code, bool) or not isinstance(code, int):
+        return None
+    return code
 
 
 def _require_auth(auth: str) -> RpcAuth:
@@ -226,7 +254,7 @@ class RpcClient:
         except ValueError:
             raise _BadBody(f"rpc bad body method={method}") from None
         if isinstance(data, dict) and "error" in data:
-            raise RpcError(f"rpc error for method={method}")
+            raise RpcError(f"rpc error for method={method}", code=_rpc_error_code(data["error"]))
         if isinstance(data, dict):
             return data.get("result")
         return data
@@ -241,6 +269,7 @@ class RpcClient:
         Failures raise :class:`RpcError` with no URL, header, or exception text.
         """
         bad_bodies = 0
+        last_code: int | None = None
         for endpoint in self._endpoints:
             try:
                 async for attempt in AsyncRetrying(
@@ -254,6 +283,7 @@ class RpcClient:
                         try:
                             return await self._post_once(endpoint, method, params)
                         except RpcError as exc:
+                            last_code = exc.code
                             raise _Failover from exc
             except _Failover:
                 continue
@@ -264,4 +294,7 @@ class RpcClient:
                 continue
         if bad_bodies == len(self._endpoints):
             raise DataStale(f"rpc bad body method={method} endpoints={len(self._endpoints)}")
-        raise RpcError(f"rpc failed method={method} endpoints={len(self._endpoints)}") from None
+        raise RpcError(
+            f"rpc failed method={method} endpoints={len(self._endpoints)}",
+            code=last_code,
+        ) from None

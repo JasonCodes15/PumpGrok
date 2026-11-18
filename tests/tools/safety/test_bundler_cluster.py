@@ -48,6 +48,12 @@ class _Script:
         self.fail: set[str] = set()
         self.force: dict[str, Any] = {}
         self.calls: list[str] = []
+        self.tx_configs: list[dict[str, Any]] = []
+        self.tx_sigs: list[str] = []
+        # None: this RPC has no getTransactionsForAddress. A dict is the result body.
+        self.oldest: dict[str, Any] | None = None
+        # Signature pages keyed by the `before` cursor. None uses ``sigs``.
+        self.by_before: dict[str | None, list[dict[str, Any]]] | None = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content.decode("utf-8"))
@@ -59,15 +65,38 @@ class _Script:
         if method in self.force:
             result = self.force[method]
             return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
+        if method == "getTransactionsForAddress":
+            if self.oldest is None:
+                return httpx.Response(
+                    200,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "error": {"code": -32601, "message": "Method not found"},
+                    },
+                )
+            return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": self.oldest})
         if method == "getSignaturesForAddress":
-            result: Any = self.sigs.get(str(params[0]), [])
+            result: Any = self._signatures(params)
         elif method == "getTransaction":
-            result = self.txs.get(str(params[0]))
+            signature = str(params[0])
+            self.tx_sigs.append(signature)
+            if len(params) > 1 and isinstance(params[1], dict):
+                self.tx_configs.append(params[1])
+            result = self.txs.get(signature)
         elif method == "getTokenSupply":
             result = {"context": {"slot": 1}, "value": {"amount": self.supply, "decimals": 6}}
         else:
             raise AssertionError(f"unexpected method {method}")
         return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
+
+    def _signatures(self, params: list[Any]) -> list[dict[str, Any]]:
+        if self.by_before is None:
+            return self.sigs.get(str(params[0]), [])
+        before = None
+        if len(params) > 1 and isinstance(params[1], dict):
+            before = params[1].get("before")
+        return self.by_before.get(before if isinstance(before, str) else None, [])
 
 
 def _rpc(script: _Script, *, start: float = START) -> tuple[RpcClient, httpx.AsyncClient]:
@@ -288,13 +317,65 @@ async def test_time_budget_exhaustion_is_blind() -> None:
 
 async def test_incomplete_history_is_blind() -> None:
     script = _Script()
-    # Both pages are full (the script ignores the `before` cursor), so the
-    # earliest transactions are outside the two-page cap.
-    script.sigs[MINT] = [_sig(f"s{index}", 1000 - index, 2_000_000 - index) for index in range(20)]
-    out = await _run(script)
+    # One full 1000-signature page and no older page. The fallback cap for a
+    # tight call budget is a single page, so the launch is still unseen.
+    script.sigs[MINT] = [
+        _sig(f"s{index}", 5000 - index, 3_000_000 - index) for index in range(1000)
+    ]
+    out = await _run(script, bundler_max_rpc_calls=9)
     assert out["complete"] is False
     assert out["blind_reason"] == "launch window incomplete: history exceeds the signature page cap"
     assert "getTransaction" not in script.calls
+
+
+async def test_history_longer_than_one_page_uses_the_oldest_page() -> None:
+    script = _Script()
+    newest = [_sig(f"new{index}", 9000 - index, 4_000_000 - index) for index in range(1000)]
+    oldest_newest_first = [
+        _sig("third", 82, 1_000_020),
+        _sig("second", 81, 1_000_010),
+        _sig("create", 80, 1_000_000),
+    ]
+    # getSignaturesForAddress is newest-first. The short page's last entry is
+    # the create.
+    script.by_before = {None: newest, newest[-1]["signature"]: oldest_newest_first}
+    amount = 200_000_000_000
+    script.txs["create"] = _buy(80, 1_000_000, [(ALICE, amount), (BOB, amount), (CAROL, amount)])
+    script.txs["create"]["version"] = 1
+    script.txs["second"] = _buy(81, 1_000_010, [(CREATOR, 1_000)])
+    script.txs["third"] = _buy(82, 1_000_020, [(CREATOR, 1_000)])
+    out = await _run(script)
+    assert out["complete"] is True
+    assert out["cluster_share"] == Decimal("0.6")
+    assert "same_transaction" in out["signals"]
+    assert script.tx_sigs[0] == "create"
+    assert "new0" not in script.tx_sigs
+    assert script.tx_configs
+    assert all(cfg.get("maxSupportedTransactionVersion") == 1 for cfg in script.tx_configs)
+    assert all(cfg.get("encoding") == "jsonParsed" for cfg in script.tx_configs)
+
+
+async def test_helius_oldest_signatures_skip_later_history() -> None:
+    script = _Script()
+    amount = 200_000_000_000
+    script.oldest = {
+        "data": [
+            _sig("create", 7, 1_000_000),
+            _sig("later", 40, 1_000_500),
+        ],
+        "paginationToken": "40:1",
+    }
+    script.txs["create"] = _buy(7, 1_000_000, [(CREATOR, amount), (ALICE, amount), (BOB, amount)])
+    script.txs["create"]["version"] = 0
+    script.txs["later"] = _buy(40, 1_000_500, [(CAROL, 1_000)])
+    out = await _run(script)
+    assert out["complete"] is True
+    assert out["cluster_share"] == Decimal("0.6")
+    assert "deployer_overlap" in out["signals"]
+    assert script.calls.count("getSignaturesForAddress") == 0
+    assert "getTransactionsForAddress" in script.calls
+    assert script.tx_sigs[:2] == ["create", "later"]
+    assert all(cfg.get("maxSupportedTransactionVersion") == 1 for cfg in script.tx_configs)
 
 
 async def test_unreadable_launch_transaction_is_blind() -> None:

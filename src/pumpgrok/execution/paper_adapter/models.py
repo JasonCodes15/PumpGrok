@@ -29,6 +29,16 @@ class CurveSnapshot(BaseModel):
     # Recorded time of the reading (fixture tick time). None for a live read, which is
     # priced at the moment it is taken.
     ts: float | None = None
+    # Real SOL in the pool. When set, the liquidity floor uses this instead of
+    # ``s_lamports`` (the virtual reserve the constant-product fill still uses).
+    # None means the source recorded a single reserve figure (replay ticks).
+    real_sol_reserves_lamports: int | None = None
+
+    def liquidity_lamports(self) -> int:
+        """SOL the floor compares. Real reserves when the source reported them."""
+        if self.real_sol_reserves_lamports is not None:
+            return int(self.real_sol_reserves_lamports)
+        return int(self.s_lamports)
 
 
 class PriceSource(Protocol):

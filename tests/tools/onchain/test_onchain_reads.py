@@ -34,6 +34,7 @@ from pumpgrok.tools.onchain.authorities_tool import AuthoritiesIn
 from pumpgrok.tools.onchain.curve_layout import CURVE_ACCOUNT_SIZE, encode_curve_fixture
 from pumpgrok.tools.onchain.deployer_history import DeployerHistoryIn
 from pumpgrok.tools.onchain.large_transfers import LargeTransfersIn
+from pumpgrok.tools.onchain.launches import PUMP_PROGRAM
 from pumpgrok.tools.onchain.lp_status import LpStatusIn
 from pumpgrok.tools.onchain.priority_fee_tool import PriorityFeeIn
 from pumpgrok.tools.onchain.rpc import RpcClient
@@ -145,6 +146,27 @@ def _rpc() -> RpcClient:
             }
         elif method == "getTokenSupply":
             result = {"context": {"slot": 9}, "value": {"amount": str(SUPPLY), "decimals": 6}}
+        elif method == "getProgramAccounts":
+            raw = encode_curve_fixture(
+                virtual_sol_reserves_lamports=30_000_000_000,
+                virtual_token_reserves_units=1_000_000_000_000_000,
+                real_sol_reserves_lamports=62,
+                real_token_reserves_units=793_100_000_000_000,
+                total_supply_units=1_000_000_000_000_000,
+                complete=False,
+                creator=CREATOR,
+            )
+            result = [
+                {
+                    "pubkey": "Curve1111111111111111111111111111111111111",
+                    "account": {
+                        "data": [base64.b64encode(raw).decode("ascii"), "base64"],
+                        "owner": PUMP_PROGRAM,
+                        "lamports": 1,
+                        "executable": False,
+                    },
+                }
+            ]
         elif method == "getSignaturesForAddress":
             if params[0] == CREATOR:
                 result = [
@@ -266,9 +288,10 @@ async def test_top_holders_excludes_curve_accounts() -> None:
     assert all(h.address != "A" * 44 for h in out.holders)
 
 
-async def test_deployer_history_counts_window() -> None:
+async def test_deployer_history_counts_launches_not_signatures() -> None:
+    """Two signatures in the window are not two launches. One creator curve is."""
     out = await _run("onchain.deployer_history", DeployerHistoryIn(creator=CREATOR))
-    assert out.tokens_seen == 2
+    assert out.tokens_seen == 1
     assert out.recent_signatures == ["d1", "d2"]
     assert out.is_known_bad is False
     assert out.first_seen_at is not None

@@ -2,9 +2,9 @@
 """Read-only bonding-curve layout probe (INT-10, R65).
 
 One ``getAccountInfo`` call against the configured public Solana RPC for a
-known bonding-curve account, decoded under the ASSUMED layout in
-``src/pumpgrok/tools/onchain/curve_layout.py`` (8-byte discriminator, five
-little-endian u64 reserve counters, one-byte completion flag).
+known bonding-curve account, decoded by
+``src/pumpgrok/tools/onchain/curve_layout.py`` (the 49, 81, 82, 83 and
+166-byte pump layouts, IDL field order).
 
 Read-only by construction: stdlib ``urllib`` POST of a single ``getAccountInfo``
 body, no keys loaded, no wallet, no signing path. On success the decoded
@@ -36,20 +36,20 @@ import hashlib
 import json
 import os
 import re
-import struct
 import sys
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
+from pumpgrok.tools.onchain.curve_layout import CurveDecodeError, decode_curve_account
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENDPOINT = "https://api.mainnet-beta.solana.com"
 DEFAULT_OUT = REPO_ROOT / "tests" / "fixtures" / "rpc" / "bonding_curve" / "probe.json"
 DEFAULT_DOC = REPO_ROOT / "docs" / "CURVE_LAYOUT_PROBE.md"
 
-_CURVE_STRUCT = struct.Struct("<8sQQQQQB")
-_EXPECTED_SIZE = _CURVE_STRUCT.size
+# Known layouts live in curve_layout. This script no longer pins a 49-byte size.
 
 # Owner and discriminator a bonding-curve account must carry before its bytes
 # are trusted. Both match tests/fixtures/rpc/bonding_curve/layout.json.
@@ -160,29 +160,21 @@ def _rpc_get_account(endpoint: str, account: str, commitment: str, timeout: floa
 
 
 def _decode_account(raw: bytes) -> dict:
-    """Decode raw account bytes under the ASSUMED layout; raises on mismatch."""
-    if len(raw) != _EXPECTED_SIZE:
-        raise ValueError(f"curve account size {len(raw)} != ASSUMED {_EXPECTED_SIZE}")
-    (disc, vsol, vtok, rsol, rtok, supply, complete) = _CURVE_STRUCT.unpack(raw)
-    if complete not in (0, 1):
-        raise ValueError(f"curve completion flag not boolean: {complete!r}")
-    for name, value in (
-        ("virtual_sol", vsol),
-        ("virtual_token", vtok),
-        ("real_sol", rsol),
-        ("real_token", rtok),
-        ("supply", supply),
-    ):
-        if value == 0 and name in ("virtual_sol", "virtual_token", "supply"):
-            raise ValueError(f"curve reserve {name} is zero; price undefined")
+    """Decode raw account bytes with the shared curve layout; raises on mismatch."""
+    try:
+        state = decode_curve_account(raw)
+    except CurveDecodeError as exc:
+        raise ValueError(str(exc)) from exc
+    token_units = state.virtual_token_reserves_units  # pragma: allowlist secret: field
     return {
-        "discriminator_hex": disc.hex(),
-        "virtual_sol_reserves_lamports": vsol,
-        "virtual_token_reserves_units": vtok,  # pragma: allowlist secret: on-chain reserve count
-        "real_sol_reserves_lamports": rsol,
-        "real_token_reserves_units": rtok,
-        "total_supply_units": supply,
-        "complete": bool(complete),
+        "discriminator_hex": raw[:8].hex(),
+        "virtual_sol_reserves_lamports": state.virtual_sol_reserves_lamports,
+        "virtual_token_reserves_units": token_units,  # pragma: allowlist secret: field
+        "real_sol_reserves_lamports": state.real_sol_reserves_lamports,
+        "real_token_reserves_units": state.real_token_reserves_units,
+        "total_supply_units": state.total_supply_units,
+        "complete": state.complete,
+        "creator": state.creator,
     }
 
 

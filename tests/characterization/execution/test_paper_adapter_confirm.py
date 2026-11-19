@@ -5,6 +5,8 @@ reserves, latency and size cap, or the refusal (cancel, missing reserves,
 layout, graduation, re-check, seeded drop, confirmation timeout) together with
 every ledger row and hash. The digests in ``PINS`` were recorded on the unsplit
 code (CONTEXT D-10) and must still hold after ``confirm_stages.py`` lands.
+``confirm_direct_sell`` dumps the curve snapshot, so its pin includes
+``real_sol_reserves_lamports`` (null when the fixture did not separate it).
 """
 
 from __future__ import annotations
@@ -313,7 +315,7 @@ SCENARIOS: dict[str, Callable[[Path], Awaitable[dict[str, Any]]]] = {
 }
 
 _PIN_TABLE = """
-confirm_direct_sell 3e8fa100bfa6ff0cb35073e5e39c56d3db5aa219fe56d3025cc5e42aaaf44edf
+confirm_direct_sell bf824bdda72e50b0bf5890a91833539a40a63f2bdfb3989466bc49c019345c94
 confirm_timeout_sell bab61d09d430d16e86df4e5e28dcfe86d452859e91cec7f1adc0b2a917ab1036
 cancel_sell_during_latency f60b970e4b0ff355468e08a4a2d3e4cef705094575416d08e7e18e2327031cf4
 recheck_refused_sell fa20a328b104216d94bc8c58318daaab35ac3003824229b3f9122cb1f046125a

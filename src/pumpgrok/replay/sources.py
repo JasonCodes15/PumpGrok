@@ -66,6 +66,7 @@ class FixtureCurveSource:
         if best is None:
             return None
         stamp, event = best
+        real = event.get("real_sol")
         return CurveSnapshot(
             mint=mint,
             s_lamports=int(event["S"]),
@@ -73,6 +74,9 @@ class FixtureCurveSource:
             complete=bool(event.get("complete", False)),
             source="fixture",
             ts=stamp,
+            real_sol_reserves_lamports=int(real)
+            if isinstance(real, int) and not isinstance(real, bool)
+            else None,
         )
 
     async def curve(self, mint: str) -> CurveSnapshot | None:
@@ -84,7 +88,7 @@ class FixtureCurveSource:
         snapshot = self._latest(mint)
         if snapshot is None:
             return None
-        return snapshot.s_lamports, snapshot.t_units
+        return snapshot.liquidity_lamports(), snapshot.t_units
 
     def last_open_reserves(self, mint: str) -> tuple[int, int] | None:
         """Reserves of the latest tick at or before ``now`` that still had the curve open.

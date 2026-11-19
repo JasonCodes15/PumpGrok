@@ -77,8 +77,8 @@ class _QuoteMixin:
             )
         if side is Side.BUY:
             size = int(size_lamports or 0)
-            if curve.s_lamports < self._floor(size):
-                return self._sim_reject("below_liquidity_floor", curve.s_lamports, size)
+            if curve.liquidity_lamports() < self._floor(size):
+                return self._sim_reject("below_liquidity_floor", curve.liquidity_lamports(), size)
             filled = min(size, self._fill_cap(curve.s_lamports))
             out = buy_out(curve.s_lamports, curve.t_units, filled - self._fees.venue_fee(filled))
             return SimulationResult(
@@ -89,7 +89,7 @@ class _QuoteMixin:
                 price_impact_pct=impact_buy(curve.s_lamports, filled),
                 venue_fee_lamports=self._fees.venue_fee(filled),
                 network_cost_lamports=self._fees.network_cost(),
-                liquidity_ratio=Decimal(curve.s_lamports) / Decimal(size),
+                liquidity_ratio=Decimal(curve.liquidity_lamports()) / Decimal(size),
                 rejection_reason=None,
                 latency_ms_estimate=1200,
             )

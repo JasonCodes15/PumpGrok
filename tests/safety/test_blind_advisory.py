@@ -54,7 +54,7 @@ def _curve_b64() -> str:
     return base64.b64encode(raw).decode("ascii")
 
 
-def _handler(
+def _handler(  # noqa: C901
     *, holders_ok: bool = True, jsonparsed_ok: bool = True
 ) -> Callable[[httpx.Request], httpx.Response]:
     curve = _curve_b64()
@@ -110,6 +110,8 @@ def _handler(
             }
         elif method == "getTokenSupply":
             result = {"context": {"slot": 9}, "value": {"amount": "1000000000000", "decimals": 6}}
+        elif method == "getProgramAccounts":
+            result = []
         elif method == "getSignaturesForAddress":
             result = [{"signature": "d1", "slot": 1, "blockTime": _NOW - 100}]
         elif method == "getTransaction":

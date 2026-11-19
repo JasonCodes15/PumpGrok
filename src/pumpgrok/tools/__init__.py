@@ -278,7 +278,8 @@ class _CachingPriceSource:
             return None
         snapshot = await self._inner.curve(mint)
         if snapshot is not None:
-            self.last[mint] = (snapshot.s_lamports, snapshot.t_units)
+            # The risk floor compares real SOL when the snapshot carries it.
+            self.last[mint] = (snapshot.liquidity_lamports(), snapshot.t_units)
         return snapshot
 
 

@@ -14,7 +14,7 @@ from pumpgrok.tools.safety.checks import CheckResult
 
 
 def check_lp_status(lp: dict[str, Any]) -> CheckResult:
-    """Pass on an open curve; warn once graduated (lock state unwired)."""
+    """Pass an open curve. A graduated pool needs a read lock or burn percent."""
     stage = str(lp.get("stage", "unknown"))
     if stage == "bonding_curve":
         return CheckResult(
@@ -26,13 +26,44 @@ def check_lp_status(lp: dict[str, Any]) -> CheckResult:
             reason="token still on the bonding curve; no LP to lock",
         )
     if stage == "graduated":
+        burned = lp.get("lp_burned_pct")
+        locked = lp.get("lp_locked_pct")
+        if burned is None or locked is None:
+            return CheckResult(
+                id="lp_status",
+                status="blind",
+                value=stage,
+                threshold="locked or burned",
+                weight=Decimal("0.15"),
+                reason="graduated pool lock or burn could not be read",
+            )
+        burned_pct = float(burned)
+        locked_pct = float(locked)
+        if burned_pct <= 0 and locked_pct <= 0:
+            return CheckResult(
+                id="lp_status",
+                status="fail",
+                value=0.0,
+                threshold="locked or burned",
+                weight=Decimal("0.15"),
+                reason="LP is not permanently locked and none is burned",
+            )
+        if burned_pct >= 95 or locked_pct >= 95:
+            return CheckResult(
+                id="lp_status",
+                status="pass",
+                value=max(burned_pct, locked_pct),
+                threshold="locked or burned",
+                weight=Decimal("0.15"),
+                reason=f"LP locked {locked_pct:.2f}% and burned {burned_pct:.2f}%",
+            )
         return CheckResult(
             id="lp_status",
             status="warn",
-            value=stage,
-            threshold="bonding_curve",
+            value=max(burned_pct, locked_pct),
+            threshold="locked or burned",
             weight=Decimal("0.15"),
-            reason="graduated to a pool; lock/burn state is unwired in Phase 3",
+            reason=f"LP only partly locked {locked_pct:.2f}% or burned {burned_pct:.2f}%",
         )
     return CheckResult(
         id="lp_status",

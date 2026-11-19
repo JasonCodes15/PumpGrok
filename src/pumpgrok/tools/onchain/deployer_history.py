@@ -1,10 +1,12 @@
-"""onchain.deployer_history: creator wallet history from RPC (TOOL-002).
+"""onchain.deployer_history: creator launch history from RPC (TOOL-002).
 
 WHALE-only grant (R35); ``safety.score_report`` composes it in-process for
-RUG. Counts come from ``getSignaturesForAddress`` inside the lookback
-window: ``tokens_seen`` is a signature count, not an adjudicated token
-count, and ``rugs``/``worst_pnl_pct`` stay unwired until the reputation
-book lands (Phase 4+).
+RUG. ``tokens_seen`` is the pump.fun launch count from
+:func:`pumpgrok.tools.onchain.launches.count_creator_launches`: bonding-curve
+accounts whose creator field is this wallet. It is not a signature count.
+``recent_signatures`` is still the signature window, kept as evidence of
+activity, and is not the launch count. ``rugs`` and ``worst_pnl_pct`` stay
+unwired. A failed launch scan is ``DataStale`` (BLIND), never zero.
 """
 
 from datetime import UTC, datetime
@@ -18,6 +20,7 @@ from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import J5, SOLANA_RPC_SOURCE, MintStr, meta_now, utcnow
+from pumpgrok.tools.onchain.launches import count_creator_launches
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
 
 _SIG_LIMIT = 100
@@ -46,8 +49,8 @@ class DeployerHistoryOut(ToolOutput):
 DEPLOYER_HISTORY_SPEC = ToolSpec(
     name="onchain.deployer_history",
     description=(
-        "Creator wallet history from the RPC signature window; "
-        "adjudicated rug fields are unwired pending the reputation book."
+        "Creator launch count: pump.fun bonding curves whose creator field "
+        "is this wallet. Signature rows are evidence, not the count."
     ),
     input_model=DeployerHistoryIn,
     output_model=DeployerHistoryOut,
@@ -60,7 +63,13 @@ DEPLOYER_HISTORY_SPEC = ToolSpec(
 
 
 async def run_deployer_history(inp: DeployerHistoryIn, rpc: RpcClient) -> dict[str, Any]:
-    """Scan the signature window and return a validated typed payload."""
+    """Count launches, then attach the signature window as evidence."""
+    try:
+        launches = await count_creator_launches(rpc, inp.creator)
+    except DataStale as exc:
+        raise DataStale(
+            f"onchain.deployer_history launches unreadable creator={inp.creator}"
+        ) from exc
     try:
         sigs = await rpc.call("getSignaturesForAddress", [inp.creator, {"limit": _SIG_LIMIT}])
     except RpcError as exc:
@@ -78,7 +87,7 @@ async def run_deployer_history(inp: DeployerHistoryIn, rpc: RpcClient) -> dict[s
         kept.append(entry)
     stamps = [e["blockTime"] for e in kept if isinstance(e.get("blockTime"), int)]
     out = {
-        "tokens_seen": len(kept),
+        "tokens_seen": launches,
         "tokens_bought": 0,
         "rugs": 0,
         "worst_pnl_pct": None,

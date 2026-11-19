@@ -102,6 +102,8 @@ def _handler(*, freeze_live: bool, supply: str, holders_ok: bool):
             }
         elif method == "getTokenSupply":
             result = {"context": {"slot": 9}, "value": {"amount": supply, "decimals": 6}}
+        elif method == "getProgramAccounts":
+            result = []
         elif method == "getSignaturesForAddress":
             result = [{"signature": "d1", "slot": 1, "blockTime": _NOW - 100}]
         elif method == "getTransaction":

@@ -25,6 +25,10 @@ Adaptations from the oracle (deliberate, R45/R46: no trade subscription):
 - Time is explicit everywhere: ``parse_create_event``, ``handle_event``,
   ``sweep``, and ``passes_filter`` take ``now`` instead of reading the
   wall clock.
+- Curve progress and ``sol_in_curve`` follow real SOL (``solInBondingCurve``).
+  ``vSolInBondingCurve`` is stored as ``virtual_sol_reserves_lamports`` and
+  is not the liquidity figure. A frame with only the virtual field leaves
+  liquidity unread.
 """
 
 from __future__ import annotations
@@ -196,7 +200,8 @@ def test_parse_create_event() -> None:
             "mint": "M",
             "name": "Cat",
             "image": "i",
-            "vSolInBondingCurve": 8.5,
+            "vSolInBondingCurve": 30.0,
+            "solInBondingCurve": 8.5,
             "marketCapSol": 100.0,
             "timestamp": (NOW - 300) * 1000,
         },
@@ -207,6 +212,22 @@ def test_parse_create_event() -> None:
     assert token.created_timestamp == pytest.approx(NOW - 300)
     expected = 8_500_000_000 / CURVE_COMPLETION_LAMPORTS
     assert token.curve_progress == pytest.approx(expected)
+    assert token.liquidity_lamports == 8_500_000_000
+    assert token.virtual_sol_reserves_lamports == 30_000_000_000
+    assert token.sol_in_curve == 8_500_000_000
+
+
+def test_virtual_reserves_are_not_lead_liquidity() -> None:
+    """A socket that only carries virtual SOL does not invent a liquidity figure."""
+    token = parse_create_event(
+        {"txType": "create", "mint": "M", "vSolInBondingCurve": 30.0, "timestamp": NOW},
+        NOW,
+    )
+    assert token is not None
+    assert token.virtual_sol_reserves_lamports == 30_000_000_000
+    assert token.liquidity_lamports is None
+    assert token.sol_in_curve == 0
+    assert token.curve_progress == 0.0
 
 
 def test_parse_create_event_second_timestamps() -> None:
@@ -291,7 +312,8 @@ def test_curve_overflow_skips_permanently() -> None:
             "name": "n",
             "image": "i",
             "timestamp": (NOW - 300) * 1000,
-            "vSolInBondingCurve": 76.5,
+            "vSolInBondingCurve": 106.5,
+            "solInBondingCurve": 76.5,
         },
         NOW,
     )

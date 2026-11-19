@@ -1,8 +1,9 @@
-"""onchain.lp_status: curve completion from the ASSUMED account (TOOL-002, B9).
+"""onchain.lp_status: curve stage and, once graduated, DAMM v2 lock/burn.
 
-Reads the same curve account as ``market.price`` through
-:mod:`pumpgrok.tools.onchain.curve_layout` (never REST). LP-mint fields
-stay null: no graduated-pool data source is wired in Phase 3.
+An open bonding curve has no LP to lock. A completed curve is read from the
+Meteora DAMM v2 pool (permanent lock on the pool, burn from position NFTs).
+Lock or burn left unset means that half could not be read. DAMM v1 and DLMM
+are not decoded; a missing v2 pool does not invent a lock percent.
 """
 
 from __future__ import annotations
@@ -17,11 +18,8 @@ from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import J5, SOLANA_RPC_SOURCE, MintStr, meta_now
-from pumpgrok.tools.onchain.curve_layout import (
-    CurveDecodeError,
-    decode_curve_account_base64,
-)
-from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
+from pumpgrok.tools.onchain.pool_read import read_market_pool
+from pumpgrok.tools.onchain.rpc import RpcClient
 
 
 class LpStatusIn(ToolInput):
@@ -47,8 +45,8 @@ class LpStatusOut(ToolOutput):
 LP_STATUS_SPEC = ToolSpec(
     name="onchain.lp_status",
     description=(
-        "Liquidity stage from the on-chain bonding-curve account "
-        "(ASSUMED layout); LP-mint lock fields are unwired."
+        "Liquidity stage from the bonding curve, plus DAMM v2 permanent "
+        "lock and position-NFT burn once the curve is complete."
     ),
     input_model=LpStatusIn,
     output_model=LpStatusOut,
@@ -61,26 +59,26 @@ LP_STATUS_SPEC = ToolSpec(
 
 
 async def run_lp_status(inp: LpStatusIn, rpc: RpcClient) -> dict[str, Any]:
-    """Fetch the curve account and return a validated ``LpStatusOut`` payload."""
+    """Read the curve or DAMM v2 pool and return a validated payload."""
     try:
-        result = await rpc.call("getAccountInfo", [inp.curve_account, {"encoding": "base64"}])
-    except RpcError as exc:
-        raise DataStale(f"onchain.lp_status upstream failed mint={inp.mint}") from exc
-    if not isinstance(result, dict) or result.get("value") is None:
-        raise DataStale(f"onchain.lp_status account missing mint={inp.mint}")
-    try:
-        state = decode_curve_account_base64(result["value"].get("data"))
-    except CurveDecodeError as exc:
-        raise DataStale(f"onchain.lp_status undecodable curve mint={inp.mint}") from exc
+        market = await read_market_pool(rpc, inp.mint, inp.curve_account)
+    except DataStale as exc:
+        raise DataStale(f"onchain.lp_status unreadable mint={inp.mint}") from exc
+    burned = None if market.lock is None else market.lock.burned_pct
+    locked = None if market.lock is None else market.lock.locked_pct
+    checked = ["curve_account"]
+    if market.lock is not None:
+        checked.extend(market.lock.checked)
+    stage = "graduated" if market.graduated else "bonding_curve"
     out = {
-        "stage": "graduated" if state.complete else "bonding_curve",
-        "curve_complete": state.complete,
-        "lp_mint": None,
-        "lp_burned_pct": None,
-        "lp_locked_pct": None,
-        "locker": None,
+        "stage": stage,
+        "curve_complete": market.graduated,
+        "lp_mint": None if market.pool is None else market.pool.address,
+        "lp_burned_pct": burned,
+        "lp_locked_pct": locked,
+        "locker": "meteora-damm-v2" if market.kind == "damm_v2" else None,
         "lock_expires_at": None,
-        "checked": ["curve_account"],
+        "checked": checked,
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
             inp.correlation_id or (str(a) if (a := ambient_correlation()) else None),

@@ -172,11 +172,18 @@ def test_enrich_fills_only_missing_fields() -> None:
     tok = token(description="already here")
     enrich_token(
         tok,
-        {"description": "card", "twitter": "t", "virtual_sol_reserves": 30_000_000_000},
+        {
+            "description": "card",
+            "twitter": "t",
+            "virtual_sol_reserves": 30_000_000_000,
+            "real_sol_reserves": 62,
+        },
     )
     assert tok.description == "already here"
     assert tok.twitter == "t"
-    assert tok.sol_in_curve == 30_000_000_000
+    assert tok.virtual_sol_reserves_lamports == 30_000_000_000
+    assert tok.liquidity_lamports == 62
+    assert tok.sol_in_curve == 62
 
 
 # --- metrics -----------------------------------------------------------------

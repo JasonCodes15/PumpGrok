@@ -12,6 +12,7 @@ import importlib.util
 import os
 import shutil
 import stat
+import struct
 import subprocess
 from pathlib import Path
 from types import ModuleType
@@ -110,8 +111,7 @@ def _load_probe() -> ModuleType:
 
 def _account_payload(owner: str, disc_hex: str) -> dict:
     """A getAccountInfo payload whose bytes have the right length and plausible counters."""
-    probe = _load_probe()
-    raw = probe._CURVE_STRUCT.pack(
+    raw = struct.Struct("<8sQQQQQB").pack(
         bytes.fromhex(disc_hex), 30_000_000_000, 1_000_000_000_000, 5_000_000_000, 7, 9, 0
     )
     data = base64.b64encode(raw).decode("ascii")

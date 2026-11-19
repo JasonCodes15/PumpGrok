@@ -85,10 +85,27 @@ def _coerce_float(value: Any, default: float) -> float:
 
 def _coerce_lamports(value: Any, default: int) -> int:
     """Best-effort SOL amount to integer lamports, ROUND_HALF_UP. Default on garbage."""
+    parsed = _optional_lamports(value)
+    return default if parsed is None else parsed
+
+
+def _optional_lamports(value: Any) -> int | None:
+    """SOL amount to lamports, or None when the field is missing or unparseable."""
+    if value is None:
+        return None
     try:
         return sol_to_lamports(Decimal(str(value)))
     except (ArithmeticError, ValueError, TypeError):
-        return default
+        return None
+
+
+def _first_lamports(payload: dict[str, Any], keys: tuple[str, ...]) -> int | None:
+    """First present key, parsed as SOL. A missing key is unread, not zero."""
+    for key in keys:
+        if key not in payload:
+            continue
+        return _optional_lamports(payload.get(key))
+    return None
 
 
 def parse_create_event(payload: dict[str, Any], now: float) -> Token | None:
@@ -103,7 +120,14 @@ def parse_create_event(payload: dict[str, Any], now: float) -> Token | None:
         created = payload.get("timestamp") or payload.get("createdTimestamp")
         created_num = _coerce_float(created, now)
         created_ts = created_num / 1000.0 if created and created_num > 1e11 else created_num
-        sol_in_curve = _coerce_lamports(payload.get("vSolInBondingCurve"), 0)
+        virtual = _optional_lamports(payload.get("vSolInBondingCurve"))
+        real = _first_lamports(
+            payload,
+            ("solInBondingCurve", "realSolReserves", "realSolInBondingCurve"),
+        )
+        # Real reserves are the liquidity. Virtual is stored beside them and
+        # does not fill sol_in_curve or the curve-progress gate.
+        sol_in_curve = real if real is not None else 0
 
         return Token(
             mint=mint,
@@ -118,6 +142,8 @@ def parse_create_event(payload: dict[str, Any], now: float) -> Token | None:
             creator=payload.get("traderPublicKey") or payload.get("creator"),
             created_timestamp=created_ts,
             sol_in_curve=sol_in_curve,
+            liquidity_lamports=real,
+            virtual_sol_reserves_lamports=virtual,
             market_cap_sol=_coerce_lamports(payload.get("marketCapSol"), 0),
             curve_progress=min(1.0, sol_in_curve / CURVE_COMPLETION_LAMPORTS),
         )

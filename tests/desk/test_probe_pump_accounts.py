@@ -41,7 +41,16 @@ FORBIDDEN_SEND_TOKENS = ("sendTransaction", "send_transaction", "requestAirdrop"
 
 
 def _account_value(*, owner: str = PROGRAM, disc: bytes = DISCRIMINATOR) -> dict[str, Any]:
-    raw = CURVE.pack(disc, 30_000_000_000, 1_073_000_000, 0, 0, 1_000_000_000, 0)
+    # IDL order: virtual token, virtual SOL, real token, real SOL, supply, complete.
+    raw = CURVE.pack(
+        disc,
+        1_073_000_000_000_000,
+        30_000_000_000,
+        793_100_000_000_000,
+        0,
+        1_000_000_000_000_000,
+        0,
+    )
     return {
         "owner": owner,
         "lamports": 2_039_280,

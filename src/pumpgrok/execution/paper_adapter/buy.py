@@ -334,12 +334,12 @@ class _BuyMixin:
     ) -> _BuyQuote:
         """Liquidity floor plus the decision-reserve fill math; refusals raise here."""
         size = decision_size
-        if curve0.s_lamports < self._floor(size):
+        if curve0.liquidity_lamports() < self._floor(size):
             raise await self._reject(
                 request,
                 request.decision_id,
                 "below_liquidity_floor",
-                f"S0={curve0.s_lamports} floor={self._floor(size)}",
+                f"S0={curve0.liquidity_lamports()} floor={self._floor(size)}",
                 stage="ACCEPTED",
                 source=ledger_source,
                 correlation_id=correlation_id,

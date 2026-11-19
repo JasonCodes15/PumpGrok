@@ -236,9 +236,15 @@ def enrich_token(token: Token, info: dict[str, Any]) -> Token:
     if info.get("market_cap") is not None:
         with contextlib.suppress(ValueError, TypeError):
             token.market_cap_sol = _to_lamports(info["market_cap"])
+    # Virtual reserves are labelled and are not the liquidity figure.
     if info.get("virtual_sol_reserves") is not None:
         with contextlib.suppress(ValueError, TypeError):
-            token.sol_in_curve = _to_base_units(info["virtual_sol_reserves"])
+            token.virtual_sol_reserves_lamports = _to_base_units(info["virtual_sol_reserves"])
+    if info.get("real_sol_reserves") is not None:
+        with contextlib.suppress(ValueError, TypeError):
+            real = _to_base_units(info["real_sol_reserves"])
+            token.liquidity_lamports = real
+            token.sol_in_curve = real
     return token
 
 

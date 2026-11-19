@@ -50,9 +50,16 @@ class Token(BaseModel):
     # Buyer evidence. None means no evidence (fail closed); an int, even 0,
     # means the count was observed.
     unique_buyers: int | None = None
-    curve_progress: float = 0.0  # 0..1, share of the curve already bought
+    curve_progress: float = 0.0  # 0..1, from real SOL against the 85 SOL bar
     market_cap_sol: int = 0  # lamports (INT-01: integer money)
-    sol_in_curve: int = 0  # lamports (INT-01: integer money)
+    # Real SOL in the curve, lamports. 0 when real reserves were not observed.
+    # The LEAD liquidity figure is ``liquidity_lamports`` (None when unread).
+    sol_in_curve: int = 0
+    liquidity_lamports: int | None = None
+    # Virtual quote, labelled so it is not used as liquidity.
+    virtual_sol_reserves_lamports: int | None = None
+    # Pump curves whose creator field is this wallet. None when unread.
+    prior_launches: int | None = None
 
     def age_seconds(self, now: float) -> float:
         if not self.created_timestamp:

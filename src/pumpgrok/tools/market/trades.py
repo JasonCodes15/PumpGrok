@@ -19,7 +19,7 @@ from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.core.units import lamports_to_sol
 from pumpgrok.tools._common import J4, SOLANA_RPC_SOURCE, MintStr, meta_now
-from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
+from pumpgrok.tools.onchain.rpc import TRANSACTION_CONFIG, RpcClient, RpcError
 
 _TX_LIMIT_PER_MINT = 200
 
@@ -214,7 +214,7 @@ async def fetch_trades(
                 "getTransaction",
                 [
                     entry["signature"],
-                    {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0},
+                    dict(TRANSACTION_CONFIG),
                 ],
             )
         except RpcError:
